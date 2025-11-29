@@ -2,6 +2,7 @@
 #include "munit.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // ====== Helper Functions ======
@@ -12,6 +13,54 @@ static void assert_slice_equals(struct Interner* interner, struct Slice slice,
   const char* actual = (const char*) arena_get_slice(&interner->arena, slice);
   munit_assert_string_equal(actual, expected);
   munit_assert_size(slice.length, ==, strlen(expected));
+}
+
+// Verify edge exists in edges vector
+static void assert_edge_exists(struct VecSlice* edges, uint32_t from_id,
+                               uint32_t to_id, const char* description) {
+  for (uint32_t i = 0; i < edges->length; i++) {
+    struct Slice edge = edges->data[i];
+    if (edge.offset == from_id && edge.length == to_id) {
+      return; // Found it
+    }
+  }
+  munit_errorf("Edge not found: %s (from=%u, to=%u)", description, from_id,
+               to_id);
+}
+
+// Create temporary file for testing (auto-deleted)
+static FILE* create_test_file(const char* content, size_t len) {
+  FILE* tmp = tmpfile(); // Auto-deleted on close
+  if (tmp == NULL) {
+    munit_error("Failed to create temp file");
+  }
+  fwrite(content, 1, len, tmp);
+  rewind(tmp); // Reset to beginning for reading
+  return tmp;
+}
+
+// Verify edge count
+static void assert_edges_count(struct VecSlice* edges, uint32_t expected,
+                               const char* context) {
+  if (edges->length != expected) {
+    munit_errorf("Expected %u edges (%s), got %u", expected, context,
+                 edges->length);
+  }
+}
+
+// Get ID of interned string
+static uint32_t get_interned_id(struct Interner* interner, const char* str) {
+  uint32_t id = intern_from_cstr(interner, str, strlen(str));
+  return id;
+}
+
+// Create test buffer with content
+static char* create_buffer_with_content(const char* content, size_t* out_len) {
+  size_t len = strlen(content);
+  char* buf = malloc(len);
+  memcpy(buf, content, len);
+  *out_len = len;
+  return buf;
 }
 
 // Check if Slice exists in Vec
@@ -235,6 +284,99 @@ static MunitResult test_interner_long_string(const MunitParameter params[],
   return MUNIT_OK;
 }
 
+/* ====== Parse Links Tests ====== */
+
+/* Test 1: Parse a single complete link */
+static MunitResult
+test_parse_links_single_complete(const MunitParameter params[], void* data) {
+  (void) params;
+  (void) data;
+
+  struct Interner interner = interner_init(1024);
+  struct VecSlice edges = vec_slice_init(128);
+
+  const char* content = "Some text [[Link]] more text";
+  uint32_t from_id = 1; // Arbitrary page ID
+  char* result =
+      parse_links((char*) content, strlen(content), &interner, &edges, from_id);
+
+  // Should return NULL (no incomplete link)
+  munit_assert_null(result);
+
+  // Should have created 1 edge
+  assert_edges_count(&edges, 1, "single complete link");
+
+  // Verify the edge points to "Link"
+  uint32_t link_id = get_interned_id(&interner, "Link");
+  assert_edge_exists(&edges, from_id, link_id, "edge to Link");
+
+  interner_destroy(&interner);
+  free(edges.data);
+  return MUNIT_OK;
+}
+
+/* Test 3: Parse multiple complete links */
+static MunitResult
+test_parse_links_multiple_complete(const MunitParameter params[], void* data) {
+  (void) params;
+  (void) data;
+
+  struct Interner interner = interner_init(1024);
+  struct VecSlice edges = vec_slice_init(128);
+
+  const char* content = "[[Link1]] text [[Link2]]";
+  uint32_t from_id = get_interned_id(&interner, "Page");
+  char* result =
+      parse_links((char*) content, strlen(content), &interner, &edges, from_id);
+
+  // Should return NULL (no incomplete link)
+  munit_assert_null(result);
+
+  // Should have created 2 edges
+  assert_edges_count(&edges, 2, "two complete links");
+
+  // Verify both edges
+  char* link_1 = "Link1";
+  uint32_t link1_id = intern_from_cstr(&interner, link_1, strlen(link_1));
+  char* link_2 = "Link2";
+  uint32_t link2_id = intern_from_cstr(&interner, link_2, strlen(link_2));
+
+  assert_edge_exists(&edges, from_id, link1_id, "edge to Link1");
+  assert_edge_exists(&edges, from_id, link2_id, "edge to Link2");
+
+  interner_destroy(&interner);
+  free(edges.data);
+  return MUNIT_OK;
+}
+
+/* ====== Parse Buffer Tests ====== */
+
+/* Test 9: Parse buffer with title tag */
+static MunitResult test_parse_buffer_title_tag(const MunitParameter params[],
+                                               void* data) {
+  (void) params;
+  (void) data;
+
+  struct Interner interner = interner_init(1024);
+  struct VecSlice edges = vec_slice_init(128);
+
+  const char* content = "<title>PageName</title>";
+  uint32_t from_id = UINT32_MAX; // Should be set by parse_buffer
+  char* result = parse_buffer((char*) content, strlen(content), &interner,
+                              &edges, &from_id);
+
+  // Should return NULL (no incomplete link)
+  munit_assert_null(result);
+
+  // from_id should be set to "PageName"
+  uint32_t expected_id = get_interned_id(&interner, "PageName");
+  munit_assert_uint32(from_id, ==, expected_id);
+
+  interner_destroy(&interner);
+  free(edges.data);
+  return MUNIT_OK;
+}
+
 /* Test suite definition */
 static MunitTest test_suite_tests[] = {
     {(char*) "/interner/single_string", test_interner_single_string, NULL, NULL,
@@ -249,6 +391,13 @@ static MunitTest test_suite_tests[] = {
      NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL},
     {(char*) "/interner/long_string", test_interner_long_string, NULL, NULL,
      MUNIT_TEST_OPTION_NONE, NULL},
+    {(char*) "/parser/links_single_complete", test_parse_links_single_complete,
+     NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL},
+    {(char*) "/parser/links_multiple_complete",
+     test_parse_links_multiple_complete, NULL, NULL, MUNIT_TEST_OPTION_NONE,
+     NULL},
+    {(char*) "/parser/buffer_title_tag", test_parse_buffer_title_tag, NULL,
+     NULL, MUNIT_TEST_OPTION_NONE, NULL},
     {NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL}};
 
 static const MunitSuite test_suite = {(char*) "/wiki_racer_tests",

@@ -1,5 +1,6 @@
 #include "header.h"
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 // returns index into slices or -1 if missing
@@ -9,7 +10,8 @@ static inline int interner_find_str(struct Interner* interner, const char* s,
     if (interner->strs.data[i].length != len)
       continue;
 
-    if (strcmp(s, interner->arena.data + interner->strs.data->offset) == 0) {
+    if (memcmp(s, interner->arena.data + interner->strs.data[i].offset, len) ==
+        0) {
       return i;
     }
   }

@@ -61,4 +61,9 @@ void vec_slice_push(struct VecSlice* vec, struct Slice val);
 char* parse_links(char* buf, uint32_t len, struct Interner* interner,
                   struct VecSlice* edges, uint32_t from_id);
 
+// Parses buffer looking for tags and content. Returns pointer to incomplete
+// link if found, NULL otherwise.
+char* parse_buffer(char* buf, uint32_t len, struct Interner* interner,
+                   struct VecSlice* edges, uint32_t* from_id);
+
 int build_graph();

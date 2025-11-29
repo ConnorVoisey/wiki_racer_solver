@@ -7,15 +7,17 @@
 // Parses links within the buffer and adds them into the interner and the edges.
 // When the start of a link exists in the buffer but isn't returned, a pointer
 // to the start of the link is returned. Otherwise NULL is returned
-char* parse_links(char* buf, uint32_t len, struct Interner* interner,
+char* parse_links(char* buf, uint32_t initial_len, struct Interner* interner,
                   struct VecSlice* edges, uint32_t from_id) {
-
-  printf("called parse_links: %u\n", len);
+  uint32_t len = initial_len;
+  // printf("called parse_links: %u\n", len);
   char* found = buf;
   while ((found = memchr(found, '[', len)) != NULL) {
-    len -= found - buf;
+    len = initial_len - (found - buf);
+    // printf("called parse_links inner: %u. %s\n", len, found);
     if (found[1] != '[') {
       found += 1;
+      // puts("parse_links: continued");
       continue;
     }
     found += 2;
@@ -23,6 +25,7 @@ char* parse_links(char* buf, uint32_t len, struct Interner* interner,
     // we assume that no links have a ] in them
     char* link_close = memchr(found, ']', len);
     if (link_close == NULL) {
+      // puts("parse_links: found returned");
       return found;
     }
 
@@ -40,17 +43,16 @@ char* parse_links(char* buf, uint32_t len, struct Interner* interner,
   return NULL;
 }
 
-static inline char* parse_buffer(char* buf, uint32_t len,
-                                 struct Interner* interner,
-                                 struct VecSlice* edges, uint32_t* from_id) {
-  printf("called parse_buffer: %u\n", len);
+char* parse_buffer(char* buf, uint32_t len, struct Interner* interner,
+                   struct VecSlice* edges, uint32_t* from_id) {
+  // printf("called parse_buffer: %u\n", len);
   char* open_tag = memchr(buf, '<', len);
   // TODO: could replace this with a simd check instead, maybe this would be
   // move overhead
   if (open_tag[1] == 't' && open_tag[2] == 'i' && open_tag[3] == 't' &&
       open_tag[4] == 'l' && open_tag[5] == 'e') {
     // Is title tag
-    // TODO: check buffer overflow
+    buf += 6;
     char* tag_end = memchr(buf, '>', len);
     char* tag_close_start = memchr(buf, '<', len);
     *from_id =
@@ -90,32 +92,24 @@ void print_progress(size_t count, size_t max) {
   fflush(stdout);
 }
 
-// builds the graph and writes it to the output graph file
-int build_graph() {
-  FILE* xml_file = fopen(XML_FILE_PATH, "r");
-  if (xml_file == NULL) {
-    perror("Failed to open xml file");
-    return 1;
-  }
-
+int build_graph_inner(FILE* xml_file, uint64_t buff_size,
+                      struct Interner* interner, struct VecSlice* edges,
+                      char* output_path) {
   fseek(xml_file, 0, SEEK_END);
   uint64_t file_size = ftell(xml_file);
   fseek(xml_file, 0, SEEK_SET);
 
-  char* buf = malloc(BUFF_SIZE);
+  char* buf = malloc(buff_size);
   uint64_t buf_offset = 0;
   uint64_t amount_read = 0;
   uint64_t amount_read_total = 0;
   uint32_t from_id = UINT32_MAX;
-  struct Interner interner = interner_init(1 << 20);
-  struct VecSlice edges = vec_slice_init(1 << 20);
 
-  while ((amount_read = fread(buf + buf_offset, 1, BUFF_SIZE, xml_file)) > 0) {
+  while ((amount_read = fread(buf + buf_offset, 1, buff_size, xml_file)) > 0) {
     amount_read_total += amount_read;
-    printf("\nbuf_offset: %lu\n", buf_offset);
+    // printf("\nbuf_offset: %lu\n", buf_offset);
 
-    char* buffer_end =
-        parse_buffer(buf, BUFF_SIZE, &interner, &edges, &from_id);
+    char* buffer_end = parse_buffer(buf, buff_size, interner, edges, &from_id);
     if (buffer_end) {
       printf("Returning pointer offset %ld\n", buffer_end - buf);
     }
@@ -127,9 +121,26 @@ int build_graph() {
     } else {
       buf_offset = 0;
     }
-    // print_progress(amount_read_total, file_size);
+    print_progress(amount_read_total, file_size);
   }
-  putchar('\n');
-
+  // TODO: sort the edges by from
+  // TODO: write the edges
+  // TODO: write the interner
   return 0;
+}
+
+// builds the graph and writes it to the output graph file
+int build_graph() {
+  FILE* xml_file = fopen(XML_FILE_PATH, "r");
+  if (xml_file == NULL) {
+    perror("Failed to open xml file");
+    return 1;
+  }
+
+  struct Interner interner = interner_init(1 << 20);
+  struct VecSlice edges = vec_slice_init(1 << 20);
+
+  char* output_path = "inputs/graph.bin";
+
+  return build_graph_inner(xml_file, BUFF_SIZE, &interner, &edges, output_path);
 }

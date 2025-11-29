@@ -47,6 +47,7 @@ add_executable(run_tests
     src/interner.c
     src/arena.c
     src/vec.c
+    src/build_graph.c
     ${munit_SOURCE_DIR}/munit.c
 )
 

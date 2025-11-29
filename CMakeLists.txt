@@ -13,6 +13,10 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 
 # Build graph binary
 add_executable(build_graph
+    src/arena.c
+    src/build_graph.c
+    src/interner.c
+    src/vec.c
     src/bin/build_graph.c
 )
 
@@ -55,5 +59,5 @@ add_test(NAME unit_tests COMMAND run_tests)
 
 # Optional: Add install targets
 install(TARGETS build_graph DESTINATION bin)
-# install(TARGETS solver DESTINATION bin)  # Uncomment when solver is ready
+install(TARGETS solver DESTINATION bin)  # Uncomment when solver is ready
 

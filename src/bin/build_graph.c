@@ -1,5 +1,5 @@
-#include <stdio.h>
+#include "header.h"
 
 int main() {
-  puts("testing");
+  return build_graph();
 }

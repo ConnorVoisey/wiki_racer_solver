@@ -41,8 +41,7 @@ struct Interner {
 struct Interner interner_init(uint32_t capacity);
 void interner_destroy(struct Interner* interner);
 void interner_set_arena_context(struct Arena* arena);
-uint32_t intern_from_cstr(struct Interner* interner, const char* s,
-                              size_t len);
+uint32_t intern_from_cstr(struct Interner* interner, const char* s, size_t len);
 // Ultra simple progess bar
 void print_progress(size_t count, size_t max);
 
@@ -61,3 +60,5 @@ void vec_slice_push(struct VecSlice* vec, struct Slice val);
 // to the start of the link is returned. Otherwise NULL is returned
 char* parse_links(char* buf, uint32_t len, struct Interner* interner,
                   struct VecSlice* edges, uint32_t from_id);
+
+int build_graph();

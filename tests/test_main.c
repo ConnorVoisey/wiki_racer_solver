@@ -16,11 +16,11 @@ static void assert_slice_equals(struct Interner* interner, struct Slice slice,
 }
 
 // Verify edge exists in edges vector
-static void assert_edge_exists(struct VecSlice* edges, uint32_t from_id,
+static void assert_edge_exists(struct VecEdge* edges, uint32_t from_id,
                                uint32_t to_id, const char* description) {
   for (uint32_t i = 0; i < edges->length; i++) {
-    struct Slice edge = edges->data[i];
-    if (edge.offset == from_id && edge.length == to_id) {
+    struct Edge edge = edges->data[i];
+    if (edge.from == from_id && edge.to == to_id) {
       return; // Found it
     }
   }
@@ -40,7 +40,7 @@ static FILE* create_test_file(const char* content, size_t len) {
 }
 
 // Verify edge count
-static void assert_edges_count(struct VecSlice* edges, uint32_t expected,
+static void assert_edges_count(struct VecEdge* edges, uint32_t expected,
                                const char* context) {
   if (edges->length != expected) {
     munit_errorf("Expected %u edges (%s), got %u", expected, context,
@@ -320,7 +320,7 @@ test_parse_links_single_complete(const MunitParameter params[], void* data) {
   (void) data;
 
   struct Interner interner = interner_init(1024);
-  struct VecSlice edges = vec_slice_init(128);
+  struct VecEdge edges = vec_edge_init(128);
 
   const char* content = "Some text [[Link]] more text";
   struct Str str = {.data = content, .length = strlen(content)};
@@ -349,7 +349,7 @@ test_parse_links_multiple_complete(const MunitParameter params[], void* data) {
   (void) data;
 
   struct Interner interner = interner_init(1024);
-  struct VecSlice edges = vec_slice_init(128);
+  struct VecEdge edges = vec_edge_init(128);
 
   const char* content = "[[Link1]] text [[Link2]]";
   struct Str str = {.data = content, .length = strlen(content)};
@@ -385,7 +385,7 @@ static MunitResult test_parse_buffer_title_tag(const MunitParameter params[],
   (void) data;
 
   struct Interner interner = interner_init(1024);
-  struct VecSlice edges = vec_slice_init(128);
+  struct VecEdge edges = vec_edge_init(128);
 
   const char* content = "<title>PageName</title>";
   struct Str str = {.data = content, .length = strlen(content)};
@@ -410,7 +410,7 @@ test_parse_title_across_buffers(const MunitParameter params[], void* data) {
   (void) data;
 
   struct Interner interner = interner_init(1024);
-  struct VecSlice edges = vec_slice_init(128);
+  struct VecEdge edges = vec_edge_init(128);
 
   const char* content = "starting noise <title>Page";
   struct Str str = {.data = content, .length = strlen(content)};
@@ -431,7 +431,7 @@ static MunitResult test_parse_link_across_buffers(const MunitParameter params[],
   (void) data;
 
   struct Interner interner = interner_init(1024);
-  struct VecSlice edges = vec_slice_init(128);
+  struct VecEdge edges = vec_edge_init(128);
 
   const char* content = "starting noise <title>Page</title><text>pre-text "
                         "[[first link]] then [[unclosed";
@@ -453,7 +453,7 @@ static MunitResult test_integration_simple_case(const MunitParameter params[],
   (void) data;
 
   struct Interner interner = interner_init(1024);
-  struct VecSlice edges = vec_slice_init(128);
+  struct VecEdge edges = vec_edge_init(128);
 
   FILE* xml_file = tmpfile();
   const char* content = "starting noise <title>Page</title><text>pre-text "
@@ -476,11 +476,11 @@ static MunitResult test_integration_simple_case(const MunitParameter params[],
   munit_assert_size(interner.strs.length, ==, 3);
 
   munit_assert_size(edges.length, ==, 2);
-  munit_assert_size(edges.data[0].offset, ==, title_id);
-  munit_assert_size(edges.data[0].length, ==, link_1_id);
+  munit_assert_size(edges.data[0].from, ==, title_id);
+  munit_assert_size(edges.data[0].to, ==, link_1_id);
 
-  munit_assert_size(edges.data[1].offset, ==, title_id);
-  munit_assert_size(edges.data[1].length, ==, link_2_id);
+  munit_assert_size(edges.data[1].from, ==, title_id);
+  munit_assert_size(edges.data[1].to, ==, link_2_id);
 
   interner_destroy(&interner);
   free(edges.data);

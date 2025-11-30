@@ -8,7 +8,7 @@
 // When the start of a link exists in the buffer but isn't returned, a pointer
 // to the start of the link is returned. Otherwise NULL is returned
 char* parse_links(struct Str* buf, struct Interner* interner,
-                  struct VecSlice* edges, uint32_t from_id) {
+                  struct VecEdge* edges, uint32_t from_id) {
   uint32_t len = buf->length;
   printf("called parse_links: %u\n", len);
   char* found = buf->data;
@@ -38,14 +38,14 @@ char* parse_links(struct Str* buf, struct Interner* interner,
 
     uint32_t to_id = intern_from_cstr(interner, link_title, link_len);
 
-    struct Slice edge = {from_id, to_id};
-    vec_slice_push(edges, edge);
+    struct Edge edge = {from_id, to_id};
+    vec_edge_push(edges, edge);
   }
   return NULL;
 }
 
 char* parse_buffer(struct Str* buf, struct Interner* interner,
-                   struct VecSlice* edges, uint32_t* from_id) {
+                   struct VecEdge* edges, uint32_t* from_id) {
   printf("called parse_buffer: %u\n", buf->length);
   // TODO: do math to reduce the len when we move the buffer pointer
   char* open_tag = NULL;
@@ -115,7 +115,7 @@ void print_progress(size_t count, size_t max) {
 }
 
 int build_graph_inner(FILE* xml_file, uint64_t buff_size,
-                      struct Interner* interner, struct VecSlice* edges,
+                      struct Interner* interner, struct VecEdge* edges,
                       char* output_path) {
   fseek(xml_file, 0, SEEK_END);
   uint64_t file_size = ftell(xml_file);
@@ -161,7 +161,7 @@ int build_graph() {
   }
 
   struct Interner interner = interner_init(1 << 20);
-  struct VecSlice edges = vec_slice_init(1 << 20);
+  struct VecEdge edges = vec_edge_init(1 << 20);
 
   char* output_path = "inputs/graph.bin";
 

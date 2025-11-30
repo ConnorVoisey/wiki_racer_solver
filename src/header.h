@@ -24,6 +24,12 @@ struct Edge {
   uint32_t to;
 };
 
+struct VecEdge {
+  struct Edge* data;
+  uint32_t capacity;
+  uint32_t length;
+};
+
 struct VecSlice {
   struct Slice* data;
   uint32_t capacity;
@@ -63,18 +69,21 @@ void* arena_get_slice(struct Arena* arena, struct Slice slice);
 struct VecSlice vec_slice_init(unsigned long capacity);
 void vec_slice_push(struct VecSlice* vec, struct Slice val);
 
+struct VecEdge vec_edge_init(unsigned long capacity);
+void vec_edge_push(struct VecEdge* vec, struct Edge val);
+
 // Parses links within the buffer and adds them into the interner and the edges.
 // When the start of a link exists in the buffer but isn't returned, a pointer
 // to the start of the link is returned. Otherwise NULL is returned
 char* parse_links(struct Str* buf, struct Interner* interner,
-                  struct VecSlice* edges, uint32_t from_id);
+                  struct VecEdge* edges, uint32_t from_id);
 
 // Parses buffer looking for tags and content. Returns pointer to incomplete
 // link if found, NULL otherwise.
 char* parse_buffer(struct Str* buf, struct Interner* interner,
-                   struct VecSlice* edges, uint32_t* from_id);
+                   struct VecEdge* edges, uint32_t* from_id);
 
 int build_graph();
 int build_graph_inner(FILE* xml_file, uint64_t buff_size,
-                      struct Interner* interner, struct VecSlice* edges,
+                      struct Interner* interner, struct VecEdge* edges,
                       char* output_path);

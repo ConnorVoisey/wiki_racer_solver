@@ -16,6 +16,7 @@ add_executable(build_graph
     src/arena.c
     src/build_graph.c
     src/interner.c
+    src/log.c
     src/str.c
     src/vec.c
     src/bin/build_graph.c
@@ -46,6 +47,7 @@ enable_testing()
 add_executable(run_tests
     tests/test_main.c
     src/interner.c
+    src/log.c
     src/arena.c
     src/str.c
     src/vec.c

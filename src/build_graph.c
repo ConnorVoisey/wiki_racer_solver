@@ -9,24 +9,23 @@
 // to the start of the link is returned. Otherwise NULL is returned
 char* parse_links(struct Str* buf, struct Interner* interner,
                   struct VecEdge* edges, uint32_t from_id) {
-  uint32_t len = buf->length;
-  printf("called parse_links: %u\n", len);
+  log_trace("called parse_links: %u\n", buf->length);
   char* found = buf->data;
-  while ((found = memchr(found, '[', len)) != NULL) {
+  while ((found = memchr(found, '[', buf->length)) != NULL) {
     str_advance_to(buf, found);
-    printf("called parse_links inner: %u. %s\n", len, found);
+    log_trace("called parse_links inner: %u. %s\n", buf->length, found);
     if (found[1] != '[') {
       found += 1;
-      puts("parse_links: continued");
+      log_trace("parse_links: continued");
       continue;
     }
     found += 2;
     str_advance_to(buf, found);
 
     // we assume that no links have a ] in them
-    char* link_close = memchr(found, ']', len);
+    char* link_close = memchr(found, ']', buf->length);
     if (link_close == NULL) {
-      puts("parse_links: found returned");
+      log_trace("parse_links: found returned");
       return found - 2;
     }
 
@@ -46,22 +45,21 @@ char* parse_links(struct Str* buf, struct Interner* interner,
 
 char* parse_buffer(struct Str* buf, struct Interner* interner,
                    struct VecEdge* edges, uint32_t* from_id) {
-  printf("called parse_buffer: %u\n", buf->length);
+  log_trace("called parse_buffer: %u\n", buf->length);
   // TODO: do math to reduce the len when we move the buffer pointer
   char* open_tag = NULL;
   // TODO: could replace this with a simd check instead, maybe this would be
   // move overhead
   while ((open_tag = memchr(buf->data, '<', buf->length))) {
-    puts("HERE");
     if (open_tag[1] == 't' && open_tag[2] == 'i' && open_tag[3] == 't' &&
         open_tag[4] == 'l' && open_tag[5] == 'e') {
       // Is title tag
-      puts("is title");
+      log_trace("is title");
 
       str_advance_to(buf, open_tag + 6);
 
       char* tag_end = memchr(buf->data, '>', buf->length);
-      puts("tag_end");
+      log_trace("tag_end");
       if (tag_end == NULL) {
         return open_tag;
       }
@@ -69,19 +67,19 @@ char* parse_buffer(struct Str* buf, struct Interner* interner,
       if (tag_close_start == NULL) {
         return open_tag;
       }
-      puts("tag_close_start");
+      log_trace("tag_close_start");
       *from_id = intern_from_cstr(interner, tag_end + 1,
                                   tag_close_start - tag_end - 1);
       // TODO: add test showing that this should be returned, it currenty isn't
-      puts("from_id");
+      log_trace("from_id");
 
     } else if (open_tag[1] == 't' && open_tag[2] == 'e' && open_tag[3] == 'x' &&
                open_tag[4] == 't') {
-      puts("is text");
+      log_trace("is text");
       // Is text tag
       char* extra_links = parse_links(buf, interner, edges, *from_id);
       if (extra_links != NULL) {
-        puts("Returning");
+        log_trace("Returning");
         return extra_links;
       }
       // Not sure about this, we need the opening < so that it can recall this
@@ -101,17 +99,17 @@ void print_progress(size_t count, size_t max) {
   float progress = (float) count / max;
   int bar_length = progress * bar_width;
 
-  printf("\rProgress: [");
+  log_info("\rProgress: [");
   for (int i = 0; i < bar_length; ++i) {
-    putchar('=');
+    log_info("=");
   }
-  putchar('>');
+  log_info(">");
   for (int i = bar_length; i < bar_width - 1; ++i) {
-    putchar(' ');
+    log_info(" ");
   }
-  printf("] %.2f%%", progress * 100);
+  log_info("] %.2f%%", progress * 100);
 
-  fflush(stdout);
+  fflush(stderr);
 }
 
 int build_graph_inner(FILE* xml_file, uint64_t buff_size,
@@ -134,11 +132,11 @@ int build_graph_inner(FILE* xml_file, uint64_t buff_size,
     struct Str str = {.data = buf, .length = buff_size};
     char* buffer_end = parse_buffer(&str, interner, edges, &from_id);
     if (buffer_end) {
-      printf("Returning pointer offset %ld\n", buffer_end - buf);
+      log_trace("Returning pointer offset %ld\n", buffer_end - buf);
     }
 
     if (buffer_end != NULL) {
-      puts("is null");
+      log_trace("is null");
       buf_offset = buffer_end - buf;
       memmove(buf, buffer_end, buf_offset);
     } else {

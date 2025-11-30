@@ -1,3 +1,7 @@
+#ifndef FILE_HEADERS
+#define FILE_HEADERS
+
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -7,6 +11,17 @@
 #define XML_FILE_PATH "inputs/enwiki-20251101-pages-articles-multistream.xml"
 #define BUFF_SIZE 8388608 // 8mb
 #define OVERLAP 512       // Bigger than the largest link
+
+enum LogLevel {
+  LOG_LEVEL_ERROR,
+  LOG_LEVEL_INFO,
+  LOG_LEVEL_TRACE,
+};
+
+void set_log_level(enum LogLevel log_level);
+void log_trace(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+void log_info(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+void log_error(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
 
 struct Arena {
   void* data;
@@ -87,3 +102,4 @@ int build_graph();
 int build_graph_inner(FILE* xml_file, uint64_t buff_size,
                       struct Interner* interner, struct VecEdge* edges,
                       char* output_path);
+#endif

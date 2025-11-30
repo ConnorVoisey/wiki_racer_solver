@@ -524,5 +524,6 @@ static const MunitSuite test_suite = {(char*) "/wiki_racer_tests",
                                       MUNIT_SUITE_OPTION_NONE};
 
 int main(int argc, char* argv[MUNIT_ARRAY_PARAM(argc + 1)]) {
+  set_log_level(LOG_LEVEL_INFO);
   return munit_suite_main(&test_suite, (void*) "wiki_racer", argc, argv);
 }

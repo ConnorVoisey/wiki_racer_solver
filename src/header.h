@@ -30,6 +30,14 @@ struct VecSlice {
   uint32_t length;
 };
 
+// ====== Str ===== //
+
+struct Str {
+  char* data;
+  uint32_t length;
+};
+void str_advance_to(struct Str* initial_str, char* new_add);
+
 // ====== Interner ===== //
 
 struct Interner {
@@ -58,12 +66,15 @@ void vec_slice_push(struct VecSlice* vec, struct Slice val);
 // Parses links within the buffer and adds them into the interner and the edges.
 // When the start of a link exists in the buffer but isn't returned, a pointer
 // to the start of the link is returned. Otherwise NULL is returned
-char* parse_links(char* buf, uint32_t len, struct Interner* interner,
+char* parse_links(struct Str* buf, struct Interner* interner,
                   struct VecSlice* edges, uint32_t from_id);
 
 // Parses buffer looking for tags and content. Returns pointer to incomplete
 // link if found, NULL otherwise.
-char* parse_buffer(char* buf, uint32_t len, struct Interner* interner,
+char* parse_buffer(struct Str* buf, struct Interner* interner,
                    struct VecSlice* edges, uint32_t* from_id);
 
 int build_graph();
+int build_graph_inner(FILE* xml_file, uint64_t buff_size,
+                      struct Interner* interner, struct VecSlice* edges,
+                      char* output_path);

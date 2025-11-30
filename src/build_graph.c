@@ -7,26 +7,27 @@
 // Parses links within the buffer and adds them into the interner and the edges.
 // When the start of a link exists in the buffer but isn't returned, a pointer
 // to the start of the link is returned. Otherwise NULL is returned
-char* parse_links(char* buf, uint32_t initial_len, struct Interner* interner,
+char* parse_links(struct Str* buf, struct Interner* interner,
                   struct VecSlice* edges, uint32_t from_id) {
-  uint32_t len = initial_len;
-  // printf("called parse_links: %u\n", len);
-  char* found = buf;
+  uint32_t len = buf->length;
+  printf("called parse_links: %u\n", len);
+  char* found = buf->data;
   while ((found = memchr(found, '[', len)) != NULL) {
-    len = initial_len - (found - buf);
-    // printf("called parse_links inner: %u. %s\n", len, found);
+    str_advance_to(buf, found);
+    printf("called parse_links inner: %u. %s\n", len, found);
     if (found[1] != '[') {
       found += 1;
-      // puts("parse_links: continued");
+      puts("parse_links: continued");
       continue;
     }
     found += 2;
+    str_advance_to(buf, found);
 
     // we assume that no links have a ] in them
     char* link_close = memchr(found, ']', len);
     if (link_close == NULL) {
-      // puts("parse_links: found returned");
-      return found;
+      puts("parse_links: found returned");
+      return found - 2;
     }
 
     // we assume that no links have a | in them
@@ -43,31 +44,52 @@ char* parse_links(char* buf, uint32_t initial_len, struct Interner* interner,
   return NULL;
 }
 
-char* parse_buffer(char* buf, uint32_t len, struct Interner* interner,
+char* parse_buffer(struct Str* buf, struct Interner* interner,
                    struct VecSlice* edges, uint32_t* from_id) {
-  // printf("called parse_buffer: %u\n", len);
-  char* open_tag = memchr(buf, '<', len);
+  printf("called parse_buffer: %u\n", buf->length);
+  // TODO: do math to reduce the len when we move the buffer pointer
+  char* open_tag = NULL;
   // TODO: could replace this with a simd check instead, maybe this would be
   // move overhead
-  if (open_tag[1] == 't' && open_tag[2] == 'i' && open_tag[3] == 't' &&
-      open_tag[4] == 'l' && open_tag[5] == 'e') {
-    // Is title tag
-    buf += 6;
-    char* tag_end = memchr(buf, '>', len);
-    char* tag_close_start = memchr(buf, '<', len);
-    *from_id =
-        intern_from_cstr(interner, tag_end + 1, tag_close_start - tag_end - 1);
+  while ((open_tag = memchr(buf->data, '<', buf->length))) {
+    puts("HERE");
+    if (open_tag[1] == 't' && open_tag[2] == 'i' && open_tag[3] == 't' &&
+        open_tag[4] == 'l' && open_tag[5] == 'e') {
+      // Is title tag
+      puts("is title");
 
-  } else if (open_tag[1] == 't' && open_tag[2] == 'e' && open_tag[3] == 'x' &&
-             open_tag[4] == 't') {
-    // Is text tag
-    char* extra_links = parse_links(buf, len, interner, edges, *from_id);
-    if (extra_links == NULL) {
-      return extra_links;
+      str_advance_to(buf, open_tag + 6);
+
+      char* tag_end = memchr(buf->data, '>', buf->length);
+      puts("tag_end");
+      if (tag_end == NULL) {
+        return open_tag;
+      }
+      char* tag_close_start = memchr(buf->data, '<', buf->length);
+      if (tag_close_start == NULL) {
+        return open_tag;
+      }
+      puts("tag_close_start");
+      *from_id = intern_from_cstr(interner, tag_end + 1,
+                                  tag_close_start - tag_end - 1);
+      // TODO: add test showing that this should be returned, it currenty isn't
+      puts("from_id");
+
+    } else if (open_tag[1] == 't' && open_tag[2] == 'e' && open_tag[3] == 'x' &&
+               open_tag[4] == 't') {
+      puts("is text");
+      // Is text tag
+      char* extra_links = parse_links(buf, interner, edges, *from_id);
+      if (extra_links != NULL) {
+        puts("Returning");
+        return extra_links;
+      }
+      // Not sure about this, we need the opening < so that it can recall this
+      // function but it seems inefficent, maybe a buffer overhang might be more
+      // efficent
+    } else {
+      str_advance_to(buf, open_tag + 1);
     }
-    // Not sure about this, we need the opening < so that it can recall this
-    // function but it seems inefficent, maybe a buffer overhang might be more
-    // efficent
   }
 
   return NULL;
@@ -109,7 +131,8 @@ int build_graph_inner(FILE* xml_file, uint64_t buff_size,
     amount_read_total += amount_read;
     // printf("\nbuf_offset: %lu\n", buf_offset);
 
-    char* buffer_end = parse_buffer(buf, buff_size, interner, edges, &from_id);
+    struct Str str = {.data = buf, .length = buff_size};
+    char* buffer_end = parse_buffer(&str, interner, edges, &from_id);
     if (buffer_end) {
       printf("Returning pointer offset %ld\n", buffer_end - buf);
     }

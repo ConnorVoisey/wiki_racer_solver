@@ -283,6 +283,33 @@ static MunitResult test_interner_long_string(const MunitParameter params[],
   interner_destroy(&interner);
   return MUNIT_OK;
 }
+static MunitResult test_str_advance_normal(const MunitParameter params[],
+                                           void* data) {
+  (void) params;
+  (void) data;
+
+  char* contents = "Example str <tag>";
+  struct Str str = {.data = contents, .length = strlen(contents)};
+
+  {
+    str_advance_to(&str, str.data);
+    munit_assert_ptr_equal(str.data, contents);
+  }
+
+  {
+    char* new_offset = memchr(str.data, '<', str.length);
+    str_advance_to(&str, new_offset);
+    munit_assert_ptr_equal(str.data, new_offset);
+  }
+
+  {
+    char* new_offset = memchr(str.data, '>', str.length);
+    str_advance_to(&str, new_offset);
+    munit_assert_ptr_equal(str.data, new_offset);
+  }
+
+  return MUNIT_OK;
+}
 
 /* ====== Parse Links Tests ====== */
 
@@ -296,9 +323,9 @@ test_parse_links_single_complete(const MunitParameter params[], void* data) {
   struct VecSlice edges = vec_slice_init(128);
 
   const char* content = "Some text [[Link]] more text";
+  struct Str str = {.data = content, .length = strlen(content)};
   uint32_t from_id = 1; // Arbitrary page ID
-  char* result =
-      parse_links((char*) content, strlen(content), &interner, &edges, from_id);
+  char* result = parse_links(&str, &interner, &edges, from_id);
 
   // Should return NULL (no incomplete link)
   munit_assert_null(result);
@@ -325,9 +352,9 @@ test_parse_links_multiple_complete(const MunitParameter params[], void* data) {
   struct VecSlice edges = vec_slice_init(128);
 
   const char* content = "[[Link1]] text [[Link2]]";
+  struct Str str = {.data = content, .length = strlen(content)};
   uint32_t from_id = get_interned_id(&interner, "Page");
-  char* result =
-      parse_links((char*) content, strlen(content), &interner, &edges, from_id);
+  char* result = parse_links(&str, &interner, &edges, from_id);
 
   // Should return NULL (no incomplete link)
   munit_assert_null(result);
@@ -361,9 +388,9 @@ static MunitResult test_parse_buffer_title_tag(const MunitParameter params[],
   struct VecSlice edges = vec_slice_init(128);
 
   const char* content = "<title>PageName</title>";
+  struct Str str = {.data = content, .length = strlen(content)};
   uint32_t from_id = UINT32_MAX; // Should be set by parse_buffer
-  char* result = parse_buffer((char*) content, strlen(content), &interner,
-                              &edges, &from_id);
+  char* result = parse_buffer(&str, &interner, &edges, &from_id);
 
   // Should return NULL (no incomplete link)
   munit_assert_null(result);
@@ -374,6 +401,90 @@ static MunitResult test_parse_buffer_title_tag(const MunitParameter params[],
 
   interner_destroy(&interner);
   free(edges.data);
+  return MUNIT_OK;
+}
+
+static MunitResult
+test_parse_title_across_buffers(const MunitParameter params[], void* data) {
+  (void) params;
+  (void) data;
+
+  struct Interner interner = interner_init(1024);
+  struct VecSlice edges = vec_slice_init(128);
+
+  const char* content = "starting noise <title>Page";
+  struct Str str = {.data = content, .length = strlen(content)};
+  uint32_t from_id = UINT32_MAX;
+  char* result = parse_buffer(&str, &interner, &edges, &from_id);
+
+  munit_assert_not_null(result);
+  munit_assert_string_equal(result, "<title>Page");
+
+  interner_destroy(&interner);
+  free(edges.data);
+  return MUNIT_OK;
+}
+
+static MunitResult test_parse_link_across_buffers(const MunitParameter params[],
+                                                  void* data) {
+  (void) params;
+  (void) data;
+
+  struct Interner interner = interner_init(1024);
+  struct VecSlice edges = vec_slice_init(128);
+
+  const char* content = "starting noise <title>Page</title><text>pre-text "
+                        "[[first link]] then [[unclosed";
+  struct Str str = {.data = content, .length = strlen(content)};
+  uint32_t from_id = UINT32_MAX;
+  char* result = parse_buffer(&str, &interner, &edges, &from_id);
+
+  munit_assert_not_null(result);
+  munit_assert_string_equal(result, "[[unclosed");
+
+  interner_destroy(&interner);
+  free(edges.data);
+  return MUNIT_OK;
+}
+
+static MunitResult test_integration_simple_case(const MunitParameter params[],
+                                                void* data) {
+  (void) params;
+  (void) data;
+
+  struct Interner interner = interner_init(1024);
+  struct VecSlice edges = vec_slice_init(128);
+
+  FILE* xml_file = tmpfile();
+  const char* content = "starting noise <title>Page</title><text>pre-text "
+                        "[[first link]] then [[second link]].</text>";
+  struct Str str = {.data = content, .length = strlen(content)};
+  fwrite(str.data, 1, str.length, xml_file);
+  fseek(xml_file, 0, SEEK_SET);
+  build_graph_inner(xml_file, BUFF_SIZE, &interner, &edges,
+                    "./tmp_test_out/test_integration_simple_case");
+  munit_assert_size(interner.strs.length, ==, 3);
+
+  char* title = "Page";
+  uint32_t title_id = intern_from_cstr(&interner, title, strlen(title));
+  munit_assert_size(interner.strs.length, ==, 3);
+  char* link_1 = "first link";
+  uint32_t link_1_id = intern_from_cstr(&interner, link_1, strlen(link_1));
+  munit_assert_size(interner.strs.length, ==, 3);
+  char* link_2 = "second link";
+  uint32_t link_2_id = intern_from_cstr(&interner, link_2, strlen(link_2));
+  munit_assert_size(interner.strs.length, ==, 3);
+
+  munit_assert_size(edges.length, ==, 2);
+  munit_assert_size(edges.data[0].offset, ==, title_id);
+  munit_assert_size(edges.data[0].length, ==, link_1_id);
+
+  munit_assert_size(edges.data[1].offset, ==, title_id);
+  munit_assert_size(edges.data[1].length, ==, link_2_id);
+
+  interner_destroy(&interner);
+  free(edges.data);
+  fclose(xml_file);
   return MUNIT_OK;
 }
 
@@ -391,12 +502,20 @@ static MunitTest test_suite_tests[] = {
      NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL},
     {(char*) "/interner/long_string", test_interner_long_string, NULL, NULL,
      MUNIT_TEST_OPTION_NONE, NULL},
+    {(char*) "/str/advance_normal", test_str_advance_normal, NULL, NULL,
+     MUNIT_TEST_OPTION_NONE, NULL},
     {(char*) "/parser/links_single_complete", test_parse_links_single_complete,
      NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL},
     {(char*) "/parser/links_multiple_complete",
      test_parse_links_multiple_complete, NULL, NULL, MUNIT_TEST_OPTION_NONE,
      NULL},
     {(char*) "/parser/buffer_title_tag", test_parse_buffer_title_tag, NULL,
+     NULL, MUNIT_TEST_OPTION_NONE, NULL},
+    {(char*) "/parser/title_across_buffers", test_parse_title_across_buffers,
+     NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL},
+    {(char*) "/parser/link_across_buffers", test_parse_link_across_buffers,
+     NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL},
+    {(char*) "/integration/simple_case", test_integration_simple_case, NULL,
      NULL, MUNIT_TEST_OPTION_NONE, NULL},
     {NULL, NULL, NULL, NULL, MUNIT_TEST_OPTION_NONE, NULL}};
 
